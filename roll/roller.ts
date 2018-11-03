@@ -2,29 +2,31 @@
 import { ToDo, ToDoState } from "./todo";
 
 export default class Roller<Ti, To>{
-    private _todo: ToDo<Ti, To>;
-    private _fn: (data: Ti) => Promise<To>;
+    private readonly _todo: ToDo<Ti, To>;
+    private readonly _fn: (data: Ti) => PromiseLike<To>;
 
-    constructor(todo: ToDo<Ti, To>, fn: (data: Ti) => Promise<To>) {
+    constructor(todo: ToDo<Ti, To>, fn: (data: Ti) => PromiseLike<To>) {
         this._todo = todo;
         this._fn = fn;
     }
 
-    public roll(): Promise<void> {
-        return this._todo.dispatch()
-            .then(task => {
-                if (!task.end) {
-                    const result = task.result!;
-                    return this._fn(task.data!)
-                        .then(data => {
-                            result.state = ToDoState.SUCCESS;
-                            result.data = data;
-                        }, (err: Error) => {
-                            result.state = ToDoState.FAIL;
-                            result.err = err;
-                        })
-                        .then(() => this.roll())
-                }
-            });
+    public async roll(): Promise<void> {
+        while (true) {
+            const task = this._todo.dispatch();
+            if (task.end) {
+                return;
+            }
+
+            const result = task.result!;
+            try {
+                const output = await this._fn(task.data!);
+                result.state = ToDoState.SUCCESS;
+                result.data = output;
+            }
+            catch (err) {
+                result.state = ToDoState.FAIL;
+                result.err = err;
+            }
+        }
     }
 }
